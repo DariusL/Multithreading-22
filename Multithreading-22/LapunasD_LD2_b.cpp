@@ -67,9 +67,8 @@ Counter::Counter(string line)
 class Buffer
 {
 	vector<Counter> buffer;
-	omp_lock_t accessLock;
 public:
-	Buffer(){omp_init_lock(&accessLock);}
+	Buffer(){}
 	bool Add(Counter c);
 	int Take(Counter c);
 	int Size();
@@ -86,58 +85,59 @@ bool Buffer::Add(Counter c)
 {
 	if(doneUsing)
 		return false;
-	omp_set_lock(&accessLock);
-	auto i = find(buffer.begin(), buffer.end(), c);
-	if(i != buffer.end())
+	#pragma omp critical(access)
 	{
-		(*i).count += c.count;
-	}
-	else
-	{
-		auto size = buffer.size();
-		for(auto i = buffer.begin(); i != buffer.end(); i++)
+		auto i = find(buffer.begin(), buffer.end(), c);
+		if(i != buffer.end())
 		{
-			if(c < (*i))
-			{
-				buffer.insert(i, c);
-				break;
-			}
+			(*i).count += c.count;
 		}
-		if(buffer.size() == size)
-			buffer.push_back(c);
+		else
+		{
+			auto size = buffer.size();
+			for(auto i = buffer.begin(); i != buffer.end(); i++)
+			{
+				if(c < (*i))
+				{
+					buffer.insert(i, c);
+					break;
+				}
+			}
+			if(buffer.size() == size)
+				buffer.push_back(c);
+		}
 	}
-	omp_unset_lock(&accessLock);
 	return true;
 }
 
 int Buffer::Take(Counter c)
 {
 	int taken = 0;
-	if(doneMaking)
-			return 0;
-	omp_set_lock(&accessLock);
-	auto i = find(buffer.begin(), buffer.end(), c);
-	if(i != buffer.end())
+	#pragma omp critical(access)
 	{
-		if((*i).count >= c.count)
-			taken = c.count;
-		else
-			taken = (*i).count;
-		(*i).count -= taken;
+		auto i = find(buffer.begin(), buffer.end(), c);
+		if(i != buffer.end())
+		{
+			if((*i).count >= c.count)
+				taken = c.count;
+			else
+				taken = (*i).count;
+			(*i).count -= taken;
 
-		if((*i).count <= 0)
-			buffer.erase(i);
+			if((*i).count <= 0)
+				buffer.erase(i);
+		}
 	}
-	omp_unset_lock(&accessLock);
 	return taken;
 }
 
 int Buffer::Size()
 {
 	int size;
-	omp_set_lock(&accessLock);
-	size = buffer.size();
-	omp_unset_lock(&accessLock);
+	#pragma omp critical(access)
+	{
+		size = buffer.size();
+	}
 	return size;
 }
 
@@ -173,6 +173,7 @@ int main()
 	syncOut(userStuff);
 
 	int nr;
+	int done = 0;
 
 	omp_set_nested(true);
 
@@ -181,10 +182,19 @@ int main()
 		nr = omp_get_thread_num();
 		if(nr > 0)
 		{
-			Use(userStuff[nr-1]);
+			auto res = Use(userStuff[nr-1]);
+			for(auto &c : res)
+				cout << c.pav << " " << c.count << endl;
+			#pragma omp critical
+			{
+				done++;
+				if(done == userStuff.size())
+					doneUsing = true;
+			}
 		}
 		else
 		{
+			cout << "Vartotojam truko:\n\n";
 			#pragma omp parallel private(nr) num_threads(input.size())
 			{
 				nr = omp_get_thread_num();
@@ -192,10 +202,7 @@ int main()
 			}
 			doneMaking = true;
 		}
-		doneUsing = true;
 	}
-
-	cout << "main" << endl;
 
 	cout << "Nesuvartota liko:\n\n" << buffer.Print();
 
