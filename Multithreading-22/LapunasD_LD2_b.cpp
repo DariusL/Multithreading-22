@@ -67,8 +67,9 @@ Counter::Counter(string line)
 class Buffer
 {
 	vector<Counter> buffer;
+	volatile bool empty;
 public:
-	Buffer(){}
+	Buffer(): empty(true){}
 	bool Add(Counter c);
 	int Take(Counter c);
 	int Size();
@@ -106,6 +107,7 @@ bool Buffer::Add(Counter c)
 			if(buffer.size() == size)
 				buffer.push_back(c);
 		}
+		empty = false;
 	}
 	return true;
 }
@@ -113,6 +115,7 @@ bool Buffer::Add(Counter c)
 int Buffer::Take(Counter c)
 {
 	int taken = 0;
+	while(empty);
 	#pragma omp critical(access)
 	{
 		auto i = find(buffer.begin(), buffer.end(), c);
@@ -126,6 +129,8 @@ int Buffer::Take(Counter c)
 
 			if((*i).count <= 0)
 				buffer.erase(i);
+			if(buffer.empty())
+				empty = true;
 		}
 	}
 	return taken;
@@ -183,10 +188,11 @@ int main()
 		if(nr > 0)
 		{
 			auto res = Use(userStuff[nr-1]);
-			for(auto &c : res)
-				cout << c.pav << " " << c.count << endl;
+			
 			#pragma omp critical
 			{
+				for(auto &c : res)
+					cout << c.pav << " " << c.count << endl;
 				done++;
 				if(done == userStuff.size())
 					doneUsing = true;
