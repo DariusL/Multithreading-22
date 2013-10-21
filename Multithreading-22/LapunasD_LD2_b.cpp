@@ -79,7 +79,7 @@ public:
 
 void Buffer::Done()
 {
-	
+	empty = false;
 }
 
 bool Buffer::Add(Counter c)
@@ -207,6 +207,7 @@ int main()
 				Make(input[nr]);
 			}
 			doneMaking = true;
+			buffer.Done();
 		}
 	}
 
