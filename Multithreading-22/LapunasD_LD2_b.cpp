@@ -8,7 +8,7 @@
 
 using namespace std;
 
-//didzioji dalis kodo nekito nuo a dalies
+//didzioji dalis kodo nekito nuo "a" dalies
 
 volatile bool doneMaking = false;
 volatile bool doneUsing = false;
@@ -66,6 +66,8 @@ Counter::Counter(string line)
 	count = stoi(line.substr(start, end - start));
 }
 
+//pagrindine sinchronizacija naudojant omp critical vienu srities vardu - "access"
+//salyginei sinchronizacijai naudojamas empty kintamasis
 class Buffer
 {
 	vector<Counter> buffer;
@@ -117,7 +119,7 @@ bool Buffer::Add(Counter c)
 int Buffer::Take(Counter c)
 {
 	int taken = 0;
-	while(empty);
+	while(empty);//elementari salygine sinchronizacija, nelabai grazu, bet veikia
 	#pragma omp critical(access)
 	{
 		auto i = find(buffer.begin(), buffer.end(), c);
@@ -182,6 +184,7 @@ int main()
 	int nr;
 	int done = 0;
 
+	//kai dariau, nezinojau kas yra sekcijos
 	omp_set_nested(true);
 
 	#pragma omp parallel private(nr) num_threads(userStuff.size()+1)
@@ -189,10 +192,13 @@ int main()
 		nr = omp_get_thread_num();
 		if(nr > 0)
 		{
+			//visos gijos iskyrus pagrindine atlieka vartojima
 			auto res = Use(userStuff[nr-1]);
 			
 			#pragma omp critical
 			{
+				//keli vartotojai spausdinantys atrodo negraziai, todel idejau i kritine sekcija
+				//taip pat cia ziuriu kada visi vartotojai baige darba
 				for(auto &c : res)
 					cout << c.pav << " " << c.count << endl;
 				done++;
@@ -202,6 +208,7 @@ int main()
 		}
 		else
 		{
+			//pagrindine gija dar karta dalijama i gamintoju gijas
 			cout << "Vartotojam truko:\n\n";
 			#pragma omp parallel private(nr) num_threads(input.size())
 			{
