@@ -8,6 +8,8 @@
 
 using namespace std;
 
+//didzioji dalis kodo nekito nuo a dalies
+
 volatile bool doneMaking = false;
 volatile bool doneUsing = false;
 
